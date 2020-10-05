@@ -95,6 +95,7 @@ pub fn server_client(input: TokenStream) -> TokenStream {
                 }
 
                 pub fn connection(&mut self) -> #client_name {
+                    println!("Connection #{}", self.connections.len());
                     let (x1, x2) = server_client::duplex();
                     self.connections.push(x1);
                     #client_name::new(x2)
@@ -108,8 +109,10 @@ pub fn server_client(input: TokenStream) -> TokenStream {
                                 self.connections[i].send(r).unwrap();
                             }
                             if remove {
+
+                            println!("Dropped connection #{} of {}", i, self.connections.len()-1);
                                 self.connections.remove(i);
-                                continue
+                                break
                             }
                         }
                     }
