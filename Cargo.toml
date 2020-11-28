@@ -5,7 +5,7 @@ authors = ["ThePerkinrex <theperkinrex@gmail.com>"]
 edition = "2018"
 
 [features]
-default = ["tokio3"]
+default = []
 tokio2 = ["libtokio2", "async"]
 tokio3 = ["libtokio3", "async"]
 
