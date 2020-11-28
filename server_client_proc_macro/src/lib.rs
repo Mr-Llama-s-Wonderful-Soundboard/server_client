@@ -80,7 +80,7 @@ pub fn server_client(input: TokenStream) -> TokenStream {
                 pub struct #server_name #generics {
                     connections: ::server_client::IdMap<::server_client::channel::Sender<Reply>>,
                     receiver: ::server_client::channel::Receiver<(Request, usize)>,
-                    sender: ::server_client::channel::Sender<(Request, usize)>
+                    sender: ::server_client::channel::Sender<(Request, usize)>,
                     #(#fields),*
                 }
 
