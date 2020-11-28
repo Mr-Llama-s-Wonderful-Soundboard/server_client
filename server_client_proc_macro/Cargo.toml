@@ -8,6 +8,9 @@ edition = "2018"
 [lib]
 proc-macro = true
 
+[features]
+async = []
+
 [dependencies]
 syn = {version = "1.0.52", features = ["extra-traits", "full"]}
 quote = "1.0"

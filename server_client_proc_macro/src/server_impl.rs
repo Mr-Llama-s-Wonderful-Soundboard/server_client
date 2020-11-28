@@ -1,7 +1,7 @@
 use syn::parse::{Parse, ParseStream};
 // use syn::punctuated::Punctuated;
 // use syn::spanned::Spanned;
-use syn::{braced, Block, Generics, Ident, ImplItemMethod, Result, Signature, Token, Type};
+use syn::{braced, Block, Generics, Ident, ImplItemMethod, Result, Signature, Token, Type, Error};
 
 // use proc_macro2::Span;
 use quote::ToTokens;
@@ -13,12 +13,22 @@ pub struct ServerImpl {
     pub generics: Option<Generics>,
     pub public: Option<Token![pub]>,
     pub ordered: Option<Ident>,
+    pub asynchronous: Option<Token![async]>
 }
 
 impl Parse for ServerImpl {
     fn parse(input: ParseStream) -> Result<Self> {
         let public = if input.lookahead1().peek(Token![pub]) {
             Some(input.parse::<Token![pub]>()?)
+        } else {
+            None
+        };
+        let asynchronous = if input.lookahead1().peek(Token![async]) {
+            let parsed = input.parse::<Token![async]>()?;
+            if cfg!(not(feature = "async")) {
+                return Err(Error::new(parsed.span, "Can't use async modifier as the async feature for server_client is disabled"))
+            }
+            Some(parsed)
         } else {
             None
         };
@@ -55,7 +65,8 @@ impl Parse for ServerImpl {
             methods,
             generics,
             public,
-            ordered
+            ordered,
+            asynchronous
         })
     }
 }

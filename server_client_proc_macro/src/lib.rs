@@ -74,19 +74,51 @@ pub fn server_client(input: TokenStream) -> TokenStream {
     let generics = s.generics.unwrap_or_default();
     let (impl_generics, type_generics, where_clause) = generics.split_for_impl();
     let public = s.public.map(|x| quote! {#x}).unwrap_or(quote! {});
+    let await_call = if s.asynchronous.is_some() { quote! {.await}} else {quote!{}};
+    let async_token = if let Some(t) = s.asynchronous {quote! {#t}} else {quote! {}};
     let (server, client) = if s.ordered.is_some() {
+        let (sender, receiver, create) = if s.asynchronous.is_some() {
+            (quote!{::server_client::asynchronous::Sender}, quote!{::server_client::asynchronous::Receiver}, quote!{::server_client::asynchronous::unbounded})
+        }else{
+            (quote!{::server_client::channel::Sender}, quote!{::server_client::channel::Receiver}, quote!{::server_client::channel::unbounded})
+        };
+        let (clone_impl, clone_method) = if s.asynchronous.is_some() {
+            (quote! {}, quote!{
+                pub #async_token fn clone(&mut self) -> Self {
+                    self.sender.send((Request::NewConnection, self.id)).unwrap();
+                    if let Reply::NewConnection(x) = self.receiver.recv().await.unwrap() {
+                        x
+                    }else{
+                        unreachable!("Unexpected non return for fn (is this client being used in parallel?)");
+                    }
+                }
+            })
+        } else {
+            (quote! {
+                impl Clone for #client_name {
+                    fn clone(&self) -> Self {
+                        self.sender.send((Request::NewConnection, self.id)).unwrap();
+                        if let Reply::NewConnection(x) = self.receiver.recv().unwrap() {
+                            x
+                        }else{
+                            unreachable!("Unexpected non return for fn (is this client being used in parallel?)");
+                        }
+                    }
+                }
+            }, quote! {})
+        };
         (
             quote! {
                 pub struct #server_name #generics {
-                    connections: ::server_client::IdMap<::server_client::channel::Sender<Reply>>,
-                    receiver: ::server_client::channel::Receiver<(Request, usize)>,
-                    sender: ::server_client::channel::Sender<(Request, usize)>,
+                    connections: ::server_client::IdMap<#sender<Reply>>,
+                    receiver: #receiver<(Request, usize)>,
+                    sender: #sender<(Request, usize)>,
                     #(#fields),*
                 }
 
                 impl#impl_generics #server_name #type_generics #where_clause {
                     pub fn new(#(#fields),*) -> Self {
-                        let (sender, receiver) = ::server_client::channel::unbounded();
+                        let (sender, receiver) = #create();
                         Self {
                             connections: ::server_client::IdMap::new(),
                             receiver,
@@ -97,7 +129,7 @@ pub fn server_client(input: TokenStream) -> TokenStream {
 
                     pub fn connection(&mut self) -> #client_name {
                         // println!("Connection #{}", self.connections.len());
-                        let (tx, rx) = ::server_client::channel::unbounded();
+                        let (tx, rx) = #create();
                         let id = self.connections.add(tx);
                         #client_name::new(rx, self.sender.clone(), id)
                     }
@@ -133,38 +165,37 @@ pub fn server_client(input: TokenStream) -> TokenStream {
             },
             quote! {
                 pub struct #client_name {
-                    receiver: ::server_client::channel::Receiver<Reply>,
-                    sender: ::server_client::channel::Sender<(Request, usize)>,
+                    receiver: #receiver<Reply>,
+                    sender: #sender<(Request, usize)>,
                     id: usize,
                 }
 
                 impl #client_name {
-                    fn new(receiver: ::server_client::channel::Receiver<Reply>,
-                        sender: ::server_client::channel::Sender<(Request, usize)>,
+                    fn new(receiver: #receiver<Reply>,
+                        sender: #sender<(Request, usize)>,
                         id: usize) -> Self {
                         Self {receiver, sender, id}
                     }
 
                     #(
-                        pub fn #methods_names(&self, #(#methods_argnames: #methods_types),*) -> #methods_return_types {
+                        pub #async_token fn #methods_names(&self, #(#methods_argnames: #methods_types),*) -> #methods_return_types {
                             self.sender.send((Request::#methods_names_uppercase(#(#methods_argnames),*), self.id)).unwrap();
-                            if let Reply::#methods_names_uppercase(x) = self.receiver.recv().unwrap() {
+                            if let Reply::#methods_names_uppercase(x) = self.receiver.recv()#await_call.unwrap() {
                                 x
                             }else{
                                 unreachable!("Unexpected non return for fn (is this client being used in parallel?)");
                             }
                         }
                     )*
+
+                    #clone_method
                 }
 
-                impl Clone for #client_name {
-                    fn clone(&self) -> Self {
-                        self.sender.send((Request::NewConnection, self.id)).unwrap();
-                        if let Reply::NewConnection(x) = self.receiver.recv().unwrap() {
-                            x
-                        }else{
-                            unreachable!("Unexpected non return for fn (is this client being used in parallel?)");
-                        }
+                #clone_impl
+
+                impl std::fmt::Debug for #client_name {
+                    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                        write!(f, "#client_name[{}]", self.id)
                     }
                 }
 
@@ -176,10 +207,40 @@ pub fn server_client(input: TokenStream) -> TokenStream {
             },
         )
     } else {
+        let (duplex, duplex_create) = if s.asynchronous.is_some() {
+            (quote!{::server_client::asynchronous::DuplexEnd}, quote!{::server_client::asynchronous::duplex})
+        }else{
+            (quote!{::server_client::DuplexEnd}, quote!{::server_client::duplex})
+        };
+        let (clone_impl, clone_method) = if s.asynchronous.is_some() {
+            (quote! {}, quote!{
+                pub #async_token fn clone(&mut self) -> Self {
+                    self.connection.send(Request::NewConnection).unwrap();
+                    if let Reply::NewConnection(x) = self.connection.recv().await.unwrap() {
+                        x
+                    }else{
+                        unreachable!("Unexpected non return for fn (is this client being used in parallel?)");
+                    }
+                }
+            })
+        } else {
+            (quote! {
+                impl Clone for #client_name {
+                    fn clone(&self) -> Self {
+                        self.connection.send(Request::NewConnection).unwrap();
+                        if let Reply::NewConnection(x) = self.connection.recv().unwrap() {
+                            x
+                        }else{
+                            unreachable!("Unexpected non return for fn (is this client being used in parallel?)");
+                        }
+                    }
+                }
+            }, quote! {})
+        };
         (
             quote! {
                 pub struct #server_name #generics {
-                    connections: Vec<server_client::DuplexEnd<Reply, Request>>,
+                    connections: Vec<#duplex<Reply, Request>>,
                     #(#fields),*
                 }
 
@@ -193,7 +254,7 @@ pub fn server_client(input: TokenStream) -> TokenStream {
 
                     pub fn connection(&mut self) -> #client_name {
                         println!("Connection #{}", self.connections.len());
-                        let (x1, x2) = server_client::duplex();
+                        let (x1, x2) = #duplex_create();
                         self.connections.push(x1);
                         #client_name::new(x2)
                     }
@@ -232,34 +293,33 @@ pub fn server_client(input: TokenStream) -> TokenStream {
             },
             quote! {
                 pub struct #client_name {
-                    connection: server_client::DuplexEnd<Request, Reply>
+                    connection: #duplex<Request, Reply>
                 }
 
                 impl #client_name {
-                    fn new(connection: server_client::DuplexEnd<Request, Reply>) -> Self {
+                    fn new(connection: #duplex<Request, Reply>) -> Self {
                         Self {connection}
                     }
 
                     #(
-                        pub fn #methods_names(&self, #(#methods_argnames: #methods_types),*) -> #methods_return_types {
+                        pub #async_token fn #methods_names(&mut self, #(#methods_argnames: #methods_types),*) -> #methods_return_types {
                             self.connection.send(Request::#methods_names_uppercase(#(#methods_argnames),*)).unwrap();
-                            if let Reply::#methods_names_uppercase(x) = self.connection.recv().unwrap() {
+                            if let Reply::#methods_names_uppercase(x) = self.connection.recv()#await_call.unwrap() {
                                 x
                             }else{
                                 unreachable!("Unexpected non return for fn (is this client being used in parallel?)");
                             }
                         }
                     )*
+
+                    #clone_method
                 }
 
-                impl Clone for #client_name {
-                    fn clone(&self) -> Self {
-                        self.connection.send(Request::NewConnection).unwrap();
-                        if let Reply::NewConnection(x) = self.connection.recv().unwrap() {
-                            x
-                        }else{
-                            unreachable!("Unexpected non return for fn (is this client being used in parallel?)");
-                        }
+                #clone_impl
+
+                impl std::fmt::Debug for #client_name {
+                    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                        write!(f, "#client_name")
                     }
                 }
 
@@ -276,12 +336,14 @@ pub fn server_client(input: TokenStream) -> TokenStream {
         mod #mod_name {
             use super::*;
 
+            #[derive(Debug)]
             enum Request {
                 NewConnection,
                 DropConnection,
                 #(#methods_names_uppercase(#(#methods_types),*)),*
             }
 
+            #[derive(Debug)]
             enum Reply {
                 NewConnection(#client_name),
                 #(#methods_names_uppercase(#methods_return_types)),*

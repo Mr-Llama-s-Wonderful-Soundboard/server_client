@@ -4,9 +4,17 @@ version = "0.1.0"
 authors = ["ThePerkinrex <theperkinrex@gmail.com>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+default = ["tokio3"]
+tokio2 = ["libtokio2", "async"]
+tokio3 = ["libtokio3", "async"]
+
+
+async = ["server_client_proc_macro/async"]
 
 [dependencies]
 crossbeam-channel = "0.5.0"
 avl = "0.6.1"
 server_client_proc_macro = {path="./server_client_proc_macro"}
+libtokio2 = {version = "0.2", package = "tokio", features = ["sync", "rt-core"], optional = true}
+libtokio3 = {version = "0.3", package = "tokio", features = ["sync", "rt"], optional = true}
