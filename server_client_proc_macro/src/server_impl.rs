@@ -12,6 +12,7 @@ pub struct ServerImpl {
     pub methods: Vec<(Signature, Block)>,
     pub generics: Option<Generics>,
     pub public: Option<Token![pub]>,
+    pub ordered: Option<Ident>,
 }
 
 impl Parse for ServerImpl {
@@ -21,7 +22,13 @@ impl Parse for ServerImpl {
         } else {
             None
         };
-        let name = input.parse()?;
+        let next_ident: Ident = input.parse()?;
+        let (ordered, name) = if next_ident == "ordered" {
+            (Some(next_ident), input.parse()?)
+        }else{
+            (None, next_ident)
+        };
+        // let name = input.parse()?;
         let generics = if input.lookahead1().peek(Token![<]) {
             Some(Generics::parse(input)?)
         } else {
@@ -48,6 +55,7 @@ impl Parse for ServerImpl {
             methods,
             generics,
             public,
+            ordered
         })
     }
 }
