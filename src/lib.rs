@@ -1,6 +1,6 @@
 pub use crossbeam_channel as channel;
 use crossbeam_channel::{unbounded, Receiver, RecvError, SendError, Sender, TryRecvError};
-pub use server_client_proc_macro::server_client;
+pub use server_client_proc_macro::{server_client, encapsulate};
 
 #[cfg(feature = "async")]
 pub mod asynchronous {

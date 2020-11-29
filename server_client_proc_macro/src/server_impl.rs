@@ -12,7 +12,7 @@ pub struct ServerImpl {
     pub methods: Vec<(Signature, Block)>,
     pub generics: Option<Generics>,
     pub public: Option<Token![pub]>,
-    pub ordered: Option<Ident>,
+    pub ordered: Option<super::kw::ordered>,
     pub asynchronous: Option<Token![async]>
 }
 
@@ -32,13 +32,12 @@ impl Parse for ServerImpl {
         } else {
             None
         };
-        let next_ident: Ident = input.parse()?;
-        let (ordered, name) = if next_ident == "ordered" {
-            (Some(next_ident), input.parse()?)
+        let ordered = if input.lookahead1().peek(super::kw::ordered) {
+            Some(input.parse()?)
         }else{
-            (None, next_ident)
+            None
         };
-        // let name = input.parse()?;
+        let name = input.parse()?;
         let generics = if input.lookahead1().peek(Token![<]) {
             Some(Generics::parse(input)?)
         } else {

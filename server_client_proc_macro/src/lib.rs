@@ -1,8 +1,9 @@
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
+use proc_macro2::TokenStream as TokenStream2;
 
-use quote::{format_ident, quote};
+use quote::{format_ident, quote, ToTokens};
 use syn;
 
 use convert_case::{Case, Casing};
@@ -11,7 +12,6 @@ mod server_impl;
 
 #[proc_macro]
 pub fn server_client(input: TokenStream) -> TokenStream {
-    // TODO Add ordered possibility
     let s = syn::parse_macro_input!(input as server_impl::ServerImpl);
     let server_name = format_ident!("{}Server", s.name);
     let mut mod_name = format_ident!("{}Mod", s.name);
@@ -353,8 +353,52 @@ pub fn server_client(input: TokenStream) -> TokenStream {
 
             #client
         }
+        #[allow(unused_imports)]
         #public use #mod_name::{#server_name, #client_name};
     };
 
     r.into()
+}
+
+mod encapsulated;
+
+#[proc_macro_attribute]
+pub fn encapsulate(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let impl_block = syn::parse_macro_input!(item as syn::ItemImpl);
+    if let Some((n, path, for_kw)) = impl_block.trait_ {
+        let mut tokens = n.map(|x|x.to_token_stream()).unwrap_or(TokenStream2::new());
+        tokens.extend(vec![path.to_token_stream(), for_kw.to_token_stream()]);
+        return syn::Error::new_spanned(tokens, "Can't encapsulate in a server-client a trait implementation").to_compile_error().into()
+    }
+    let attrs = syn::parse_macro_input!(attr as encapsulated::Attrs);
+    let ty = &impl_block.self_ty;
+    let ty_tokens = ty.to_token_stream().into();
+    let public = attrs.public.map(|x| quote!{#x}).unwrap_or(quote!{});
+    let ordered = attrs.ordered.map(|x| quote !{#x}).unwrap_or(quote!{});
+    let asyncness = attrs.asyncness.map(|x| quote!{#x}).unwrap_or(quote!{});
+    // let type_name = syn::parse_macro_input!(ty as syn::Ident);
+    let name = attrs.name.unwrap_or(syn::parse_macro_input!(ty_tokens as syn::Ident));
+    let mut methods = Vec::new();
+    for item in &impl_block.items {
+        match encapsulated::Method::try_from_item(item, attrs.asyncness.is_some(), ty) {
+            Ok(v) => methods.push(v),
+            Err(e) => return e.to_compile_error().into()
+        }
+    }
+    let macro_tokens = quote! {
+        #public #asyncness #ordered #name {
+            let value: #ty
+
+            #(#methods)*
+        }
+    };
+    let macro_res: TokenStream2 = server_client(macro_tokens.into()).into();
+    (quote!{
+        #impl_block
+        #macro_res
+    }).into()
+}
+
+mod kw {
+    syn::custom_keyword!(ordered);
 }
