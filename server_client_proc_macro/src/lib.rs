@@ -178,7 +178,7 @@ pub fn server_client(input: TokenStream) -> TokenStream {
                     }
 
                     #(
-                        pub #async_token fn #methods_names(&self, #(#methods_argnames: #methods_types),*) -> #methods_return_types {
+                        pub #async_token fn #methods_names(&mut self, #(#methods_argnames: #methods_types),*) -> #methods_return_types {
                             self.sender.send((Request::#methods_names_uppercase(#(#methods_argnames),*), self.id)).unwrap();
                             if let Reply::#methods_names_uppercase(x) = self.receiver.recv()#await_call.unwrap() {
                                 x
@@ -333,7 +333,7 @@ pub fn server_client(input: TokenStream) -> TokenStream {
         )
     };
     let r = quote! {
-        mod #mod_name {
+        pub mod #mod_name {
             use super::*;
 
             #[derive(Debug)]
@@ -392,6 +392,8 @@ pub fn encapsulate(attr: TokenStream, item: TokenStream) -> TokenStream {
             #(#methods)*
         }
     };
+    println!("Encapsulation finished");
+    println!("{}", macro_tokens);
     let macro_res: TokenStream2 = server_client(macro_tokens.into()).into();
     (quote!{
         #impl_block

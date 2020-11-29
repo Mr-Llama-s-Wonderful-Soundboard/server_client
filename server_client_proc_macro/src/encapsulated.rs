@@ -67,8 +67,10 @@ impl Method {
             None
         };
         if let (Some(lt), Some(gt)) = &(value.sig.generics.lt_token, value.sig.generics.gt_token) {
-            return Err(Error::new(
-                lt.spans[0].join(gt.spans[0]).unwrap(),
+			let mut tokens = lt.to_token_stream();
+			tokens.extend(vec![gt.to_token_stream()]);
+            return Err(Error::new_spanned(
+                tokens,
                 "Can't encapsulate method with generics",
             ));
         }
@@ -80,7 +82,7 @@ impl Method {
         }
         let mut is_method = false;
         for x in value.sig.inputs.pairs() {
-            if let syn::FnArg::Typed(_) = x.value() {
+            if let syn::FnArg::Receiver(_) = x.value() {
                 is_method = true;
                 break;
             }
@@ -97,7 +99,29 @@ impl Method {
                     false
                 }
             })
-            .collect();
+			.collect();
+		let args_names: Result<syn::punctuated::Punctuated<Box<syn::Pat>, Token![,]>> = value
+		.sig
+		.inputs
+		.clone()
+		.into_pairs()
+		.filter(|x| {
+			if let syn::FnArg::Typed(_) = x.value() {
+				true
+			} else {
+				false
+			}
+		})
+		.map(|x|{
+			let (v, p) = x.into_tuple();
+			if let syn::FnArg::Typed(t) = v {
+				Ok(syn::punctuated::Pair::new(t.pat, p))
+			}else{
+				Err(Error::new_spanned(v, "Unexpected self"))
+			}
+		})
+		.collect();
+		let args_names= args_names?;
         let fn_tok = value.sig.fn_token;
         let name = value.sig.ident.clone();
         if name == "new" {
@@ -107,7 +131,8 @@ impl Method {
             ));
         }
 		let output = value.sig.output.clone();
-		let call = if is_method {quote! {self.value.#name(#args)#await_call}} else {quote! {#ty::#name(#args)#await_call}};
+		let call = if is_method {quote! {self.value.#name(#args_names)#await_call}} else {quote! {#ty::#name(#args)#await_call}};
+		println!("Call: {}", call);
         Ok(Self {
             t: quote! {
                 #fn_tok #name(#args) #output {
