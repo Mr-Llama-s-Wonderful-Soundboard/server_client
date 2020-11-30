@@ -132,7 +132,7 @@ impl Method {
         }
 		let output = value.sig.output.clone();
 		let call = if is_method {quote! {self.value.#name(#args_names)#await_call}} else {quote! {#ty::#name(#args)#await_call}};
-		println!("Call: {}", call);
+		// println!("Call: {}", call);
         Ok(Self {
             t: quote! {
                 #fn_tok #name(#args) #output {
