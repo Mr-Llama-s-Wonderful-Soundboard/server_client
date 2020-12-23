@@ -1,13 +1,14 @@
 [package]
 name = "server_client"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["ThePerkinrex <theperkinrex@gmail.com>"]
 edition = "2018"
 
 [features]
-default = []
-tokio2 = ["libtokio2", "async"]
-tokio3 = ["libtokio3", "async"]
+default = ["tokio1"]
+tokio02 = ["libtokio02", "async"]
+tokio03 = ["libtokio03", "async"]
+tokio1 = ["libtokio1", "async"]
 
 
 async = ["server_client_proc_macro/async"]
@@ -16,5 +17,6 @@ async = ["server_client_proc_macro/async"]
 crossbeam-channel = "0.5.0"
 avl = "0.6.1"
 server_client_proc_macro = {path="./server_client_proc_macro"}
-libtokio2 = {version = "0.2", package = "tokio", features = ["sync", "rt-core"], optional = true}
-libtokio3 = {version = "0.3", package = "tokio", features = ["sync", "rt"], optional = true}
+libtokio02 = {version = "0.2", package = "tokio", features = ["sync", "rt-core"], optional = true}
+libtokio03 = {version = "0.3", package = "tokio", features = ["sync", "rt"], optional = true}
+libtokio1 = {version = "1.0", package = "tokio", features = ["sync", "rt", "time", "macros"], optional = true}

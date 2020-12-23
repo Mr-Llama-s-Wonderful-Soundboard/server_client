@@ -134,8 +134,8 @@ pub fn server_client(input: TokenStream) -> TokenStream {
                         #client_name::new(rx, self.sender.clone(), id)
                     }
 
-                    pub fn tick(&mut self) {
-                        while let Ok((req, id)) = self.receiver.try_recv() {
+                    pub #async_token fn tick(&mut self) {
+                        while let Ok((req, id)) = self.receiver.try_recv()#await_call {
                             let (res, remove) = self.handle(req);
                             if let Some(r) = res {
                                 self.connections[id].send(r).unwrap();
@@ -259,9 +259,9 @@ pub fn server_client(input: TokenStream) -> TokenStream {
                         #client_name::new(x2)
                     }
 
-                    pub fn tick(&mut self) {
+                    pub #async_token fn tick(&mut self) {
                         for i in 0..self.connections.len() {
-                            if let Ok(m) = self.connections[i].try_recv() {
+                            if let Ok(m) = self.connections[i].try_recv()#await_call {
                                 let (res, remove) = self.handle(m);
                                 if let Some(r) = res {
                                     self.connections[i].send(r).unwrap();

@@ -1,42 +1,83 @@
 pub use crossbeam_channel as channel;
 use crossbeam_channel::{unbounded, Receiver, RecvError, SendError, Sender, TryRecvError};
-pub use server_client_proc_macro::{server_client, encapsulate};
+pub use server_client_proc_macro::{encapsulate, server_client};
 
 #[cfg(feature = "async")]
 pub mod asynchronous {
-    #[cfg(feature = "libtokio3")]
-    pub use libtokio3::sync::mpsc::{UnboundedReceiver as Receiver, UnboundedSender as Sender, unbounded_channel as unbounded, error::{SendError, TryRecvError}};
-    
-    #[cfg(feature = "libtokio2")]
-    pub use libtokio2::sync::mpsc::{UnboundedReceiver as Receiver, UnboundedSender as Sender, unbounded_channel as unbounded, error::{SendError, TryRecvError}};
+    #[cfg(feature = "libtokio03")]
+    pub use libtokio03::sync::mpsc::{
+        error::{SendError, TryRecvError as TokioTryRecvError},
+        unbounded_channel as unbounded, UnboundedReceiver as Receiver, UnboundedSender as Sender,
+    };
+
+    #[cfg(feature = "libtokio1")]
+    pub use libtokio1::sync::mpsc::{
+        error::SendError, unbounded_channel as unbounded, UnboundedReceiver as Receiver,
+        UnboundedSender as Sender,
+    };
+
+    #[cfg(feature = "libtokio02")]
+    pub use libtokio02::sync::mpsc::{
+        error::{SendError, TryRecvError as TokioTryRecvError},
+        unbounded_channel as unbounded, UnboundedReceiver as Receiver, UnboundedSender as Sender,
+    };
+
+    pub enum TryRecvError {
+        Empty,
+        Closed,
+    }
+
+    #[cfg(any(feature = "libtokio02", feature = "libtokio03"))]
+    impl From<TokioTryRecvError> for TryRecvError {
+        fn from(error: TokioTryRecvError) -> Self {
+            match error {
+                TokioTryRecvError::Closed => Self::Closed,
+                TokioTryRecvError::Empty => Self::Empty
+            }
+        }
+    }
 
     pub struct DuplexEnd<S, R = S> {
         s: Sender<S>,
         r: Receiver<R>,
     }
-    
-    
+
     impl<S, R> DuplexEnd<S, R> {
         pub fn send(&self, m: S) -> Result<(), SendError<S>> {
             self.s.send(m)
         }
-    
+
         pub async fn recv(&mut self) -> Option<R> {
             self.r.recv().await
         }
-    
-        pub fn try_recv(&mut self) -> Result<R, TryRecvError> {
-            self.r.try_recv()
+
+        #[cfg(any(feature = "libtokio02", feature = "libtokio03"))]
+        pub async fn try_recv(&mut self) -> Result<R, TryRecvError> {
+            Ok(self.r.try_recv()?)
+        }
+
+        #[cfg(feature = "libtokio1")]
+        pub async fn try_recv(&mut self) -> Result<R, TryRecvError> {
+            let sleep = libtokio1::time::sleep(std::time::Duration::from_nanos(1));
+            libtokio1::select! {
+                _ = sleep => {
+                    Err(TryRecvError::Empty)
+                },
+                x = self.r.recv() => {
+                    match x {
+                        Some(x) => Ok(x),
+                        None => Err(TryRecvError::Closed)
+                    }
+                }
+            } // Recv has to return before 1ns
         }
     }
-    
-    
+
     pub fn duplex<T, U>() -> (DuplexEnd<T, U>, DuplexEnd<U, T>) {
         let (s1, r1) = unbounded();
         let (s2, r2) = unbounded();
         (DuplexEnd { s: s1, r: r2 }, DuplexEnd { s: s2, r: r1 })
     }
-
 }
 
 pub struct DuplexEnd<S, R = S> {
