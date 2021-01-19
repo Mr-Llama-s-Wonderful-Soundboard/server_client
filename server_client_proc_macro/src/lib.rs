@@ -392,7 +392,7 @@ pub fn encapsulate(attr: TokenStream, item: TokenStream) -> TokenStream {
             #(#methods)*
         }
     };
-    println!("{}", macro_tokens);
+    // println!("{}", macro_tokens);
     let macro_res: TokenStream2 = server_client(macro_tokens.into()).into();
     (quote!{
         #impl_block
