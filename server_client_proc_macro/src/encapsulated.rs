@@ -122,7 +122,7 @@ impl Method {
 		})
 		.collect();
         let args_names= args_names?;
-        println!("{:?}", args_names);
+        // println!("{:?}", args_names);
         let fn_tok = value.sig.fn_token;
         let name = value.sig.ident.clone();
         if name == "new" {

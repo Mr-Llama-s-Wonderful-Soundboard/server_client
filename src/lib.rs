@@ -20,7 +20,7 @@ pub mod asynchronous {
     #[cfg(feature = "libtokio02")]
     pub use libtokio02::sync::mpsc::{
         error::{SendError, TryRecvError as TokioTryRecvError},
-        unbounded_channel as tokio_unbounded, UnboundedReceiver as TokioReceiver, UnboundedSender as Sender, // TODO Add try_recv to receiver
+        unbounded_channel as tokio_unbounded, UnboundedReceiver as TokioReceiver, UnboundedSender as Sender,
     };
 
     pub fn unbounded<T>() -> (Sender<T>, Receiver<T>) {
