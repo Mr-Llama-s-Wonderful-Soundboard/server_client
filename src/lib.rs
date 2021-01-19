@@ -4,23 +4,29 @@ pub use server_client_proc_macro::{encapsulate, server_client};
 
 #[cfg(feature = "async")]
 pub mod asynchronous {
-    #[cfg(feature = "libtokio03")]
-    pub use libtokio03::sync::mpsc::{
-        error::{SendError, TryRecvError as TokioTryRecvError},
-        unbounded_channel as unbounded, UnboundedReceiver as Receiver, UnboundedSender as Sender,
-    };
 
     #[cfg(feature = "libtokio1")]
     pub use libtokio1::sync::mpsc::{
-        error::SendError, unbounded_channel as unbounded, UnboundedReceiver as Receiver,
+        error::SendError, unbounded_channel as tokio_unbounded, UnboundedReceiver as TokioReceiver,
         UnboundedSender as Sender,
+    };
+
+    #[cfg(feature = "libtokio03")]
+    pub use libtokio03::sync::mpsc::{
+        error::{SendError, TryRecvError as TokioTryRecvError},
+        unbounded_channel as tokio_unbounded, UnboundedReceiver as TokioReceiver, UnboundedSender as Sender,
     };
 
     #[cfg(feature = "libtokio02")]
     pub use libtokio02::sync::mpsc::{
         error::{SendError, TryRecvError as TokioTryRecvError},
-        unbounded_channel as unbounded, UnboundedReceiver as Receiver, UnboundedSender as Sender,
+        unbounded_channel as tokio_unbounded, UnboundedReceiver as TokioReceiver, UnboundedSender as Sender, // TODO Add try_recv to receiver
     };
+
+    pub fn unbounded<T>() -> (Sender<T>, Receiver<T>) {
+        let (s, r) = tokio_unbounded();
+        (s, Receiver::new(r))
+    }
 
     pub enum TryRecvError {
         Empty,
@@ -34,6 +40,41 @@ pub mod asynchronous {
                 TokioTryRecvError::Closed => Self::Closed,
                 TokioTryRecvError::Empty => Self::Empty
             }
+        }
+    }
+
+    pub struct Receiver<T> {
+        receiver: TokioReceiver<T>
+    }
+
+    
+    impl<T> Receiver<T> {
+        pub fn new(receiver: TokioReceiver<T>) -> Self { Self { receiver } }
+
+
+        pub async fn recv(&mut self) -> Option<T> {
+            self.receiver.recv().await
+        }
+
+        #[cfg(feature = "libtokio1")]
+        pub async fn try_recv(&mut self) -> Result<T, TryRecvError> {
+            let sleep = libtokio1::time::sleep(std::time::Duration::from_nanos(1));
+            libtokio1::select! {
+                _ = sleep => {
+                    Err(TryRecvError::Empty)
+                },
+                x = self.receiver.recv() => {
+                    match x {
+                        Some(x) => Ok(x),
+                        None => Err(TryRecvError::Closed)
+                    }
+                }
+            } // Recv has to return before 1ns
+        }
+
+        #[cfg(any(feature = "libtokio02", feature = "libtokio03"))]
+        pub async fn try_recv(&mut self) -> Result<T, TryRecvError> {
+            Ok(self.r.try_recv().await?)
         }
     }
 
@@ -51,25 +92,9 @@ pub mod asynchronous {
             self.r.recv().await
         }
 
-        #[cfg(any(feature = "libtokio02", feature = "libtokio03"))]
+        #[cfg(any(feature = "libtokio02", feature = "libtokio03", feature = "libtokio1"))]
         pub async fn try_recv(&mut self) -> Result<R, TryRecvError> {
-            Ok(self.r.try_recv()?)
-        }
-
-        #[cfg(feature = "libtokio1")]
-        pub async fn try_recv(&mut self) -> Result<R, TryRecvError> {
-            let sleep = libtokio1::time::sleep(std::time::Duration::from_nanos(1));
-            libtokio1::select! {
-                _ = sleep => {
-                    Err(TryRecvError::Empty)
-                },
-                x = self.r.recv() => {
-                    match x {
-                        Some(x) => Ok(x),
-                        None => Err(TryRecvError::Closed)
-                    }
-                }
-            } // Recv has to return before 1ns
+            self.r.try_recv().await
         }
     }
 

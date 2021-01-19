@@ -121,7 +121,8 @@ impl Method {
 			}
 		})
 		.collect();
-		let args_names= args_names?;
+        let args_names= args_names?;
+        println!("{:?}", args_names);
         let fn_tok = value.sig.fn_token;
         let name = value.sig.ident.clone();
         if name == "new" {
@@ -131,7 +132,7 @@ impl Method {
             ));
         }
 		let output = value.sig.output.clone();
-		let call = if is_method {quote! {self.value.#name(#args_names)#await_call}} else {quote! {#ty::#name(#args)#await_call}};
+		let call = if is_method {quote! {self.value.#name(#args_names)#await_call}} else {quote! {#ty::#name(#args_names)#await_call}};
 		// println!("Call: {}", call);
         Ok(Self {
             t: quote! {
