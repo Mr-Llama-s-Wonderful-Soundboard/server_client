@@ -4,7 +4,6 @@ pub use server_client_proc_macro::{encapsulate, server_client};
 
 #[cfg(feature = "async")]
 pub mod asynchronous {
-
     #[cfg(feature = "libtokio1")]
     pub use libtokio1::sync::mpsc::{
         error::SendError, unbounded_channel as tokio_unbounded, UnboundedReceiver as TokioReceiver,
@@ -22,6 +21,12 @@ pub mod asynchronous {
         error::{SendError, TryRecvError as TokioTryRecvError},
         unbounded_channel as tokio_unbounded, UnboundedReceiver as TokioReceiver, UnboundedSender as Sender,
     };
+
+    // #[cfg(feature = "stream")]
+    // use futures_core::Stream;
+
+    #[cfg(feature = "stream")]
+    use futures_util::{stream::Stream, future::FutureExt};
 
     pub fn unbounded<T>() -> (Sender<T>, Receiver<T>) {
         let (s, r) = tokio_unbounded();
@@ -44,9 +49,8 @@ pub mod asynchronous {
     }
 
     pub struct Receiver<T> {
-        receiver: TokioReceiver<T>
+        receiver: TokioReceiver<T>,
     }
-
     
     impl<T> Receiver<T> {
         pub fn new(receiver: TokioReceiver<T>) -> Self { Self { receiver } }
@@ -74,7 +78,26 @@ pub mod asynchronous {
 
         #[cfg(any(feature = "libtokio02", feature = "libtokio03"))]
         pub async fn try_recv(&mut self) -> Result<T, TryRecvError> {
-            Ok(self.r.try_recv().await?)
+            Ok(self.receiver.try_recv()?)
+        }
+    }
+
+    #[cfg(all(feature = "stream"))]
+    impl<T> Stream for Receiver<T> {
+        type Item = T;
+
+        fn poll_next(
+            mut self: std::pin::Pin<&mut Self>,
+            cx: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Option<Self::Item>> {
+            #[cfg(any(feature = "libtokio1", feature = "libtokio02"))]
+            {
+                self.receiver.poll_recv(cx)
+            }
+            #[cfg(feature = "libtokio03")]
+            {
+                self.receiver.recv().boxed_local().poll_unpin(cx)
+            }
         }
     }
 
