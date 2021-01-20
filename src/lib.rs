@@ -26,7 +26,7 @@ pub mod asynchronous {
     // use futures_core::Stream;
 
     #[cfg(feature = "stream")]
-    use futures_util::{stream::Stream, future::FutureExt};
+    use futures_util::stream::Stream;
 
     pub fn unbounded<T>() -> (Sender<T>, Receiver<T>) {
         let (s, r) = tokio_unbounded();

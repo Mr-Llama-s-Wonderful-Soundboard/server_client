@@ -12,14 +12,14 @@ tokio1 = ["libtokio1", "async"]
 
 # TODO Add possible sync feature
 async = ["server_client_proc_macro/async"]
-stream = ["futures-core", "futures-util", "libtokio03/stream"]
+stream = ["futures-core", "futures-util"]
 
 [dependencies]
 crossbeam-channel = "0.5.0"
 avl = "0.6.1"
 server_client_proc_macro = {path="./server_client_proc_macro"}
 libtokio02 = {version = "0.2", package = "tokio", features = ["sync", "rt-core"], optional = true}
-libtokio03 = {version = "0.3", package = "tokio", features = ["sync", "rt"], optional = true}
+libtokio03 = {version = "0.3", package = "tokio", features = ["sync", "rt", "stream"], optional = true}
 libtokio1 = {version = "1.0", package = "tokio", features = ["sync", "rt", "time", "macros"], optional = true}
 futures-core = {version = "0.3.12", optional = true}
 futures-util = {version = "0.3.12", optional = true}
